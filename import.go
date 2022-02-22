@@ -26,7 +26,7 @@ type Importer struct {
 	version   int64
 	batch     db.Batch
 	batchSize uint32
-	stack     []*Node
+	stack     []*TreeNode
 }
 
 // newImporter creates a new Importer for an empty MutableTree.
@@ -48,7 +48,7 @@ func newImporter(tree *MutableTree, version int64) (*Importer, error) {
 		tree:    tree,
 		version: version,
 		batch:   tree.ndb.db.NewBatch(),
-		stack:   make([]*Node, 0, 8),
+		stack:   make([]*TreeNode, 0, 8),
 	}, nil
 }
 
@@ -77,7 +77,7 @@ func (i *Importer) Add(exportNode *ExportNode) error {
 			exportNode.Version, i.version)
 	}
 
-	node := &Node{
+	node := &TreeNode{
 		key:     exportNode.Key,
 		value:   exportNode.Value,
 		version: exportNode.Version,
@@ -95,22 +95,22 @@ func (i *Importer) Add(exportNode *ExportNode) error {
 	switch {
 	case stackSize >= 2 && i.stack[stackSize-1].height < node.height && i.stack[stackSize-2].height < node.height:
 		node.leftNode = i.stack[stackSize-2]
-		node.leftHash = node.leftNode.hash
+		node.leftHash = node.leftNode.getHash()
 		node.rightNode = i.stack[stackSize-1]
-		node.rightHash = node.rightNode.hash
+		node.rightHash = node.rightNode.getHash()
 	case stackSize >= 1 && i.stack[stackSize-1].height < node.height:
 		node.leftNode = i.stack[stackSize-1]
-		node.leftHash = node.leftNode.hash
+		node.leftHash = node.leftNode.getHash()
 	}
 
 	if node.height == 0 {
 		node.size = 1
 	}
 	if node.leftNode != nil {
-		node.size += node.leftNode.size
+		node.size += node.leftNode.getSize()
 	}
 	if node.rightNode != nil {
-		node.size += node.rightNode.size
+		node.size += node.rightNode.getSize()
 	}
 
 	node._hash()

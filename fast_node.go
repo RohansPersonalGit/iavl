@@ -8,10 +8,35 @@ import (
 // NOTE: This file favors int64 as opposed to int for size/counts.
 // The Tree on the other hand favors int.  This is intentional.
 
+type Node interface {
+	getKey() []byte
+	getValue() []byte
+	setKey(key []byte)
+	getVersion() int64
+	writeBytes(w io.Writer) error
+	encodedSize() int
+
+}
 type FastNode struct {
 	key                  []byte
 	versionLastUpdatedAt int64
 	value                []byte
+}
+
+func (node *FastNode) getValue() []byte{
+	return node.value
+}
+
+func (node *FastNode) getKey() []byte{
+	return node.key
+}
+
+func (node *FastNode) setKey(key []byte){
+	node.key = key
+}
+
+func (node *FastNode) getVersion() int64{
+	return node.versionLastUpdatedAt
 }
 
 // NewFastNode returns a new fast node from a value and version.
@@ -24,7 +49,7 @@ func NewFastNode(key []byte, value []byte, version int64) *FastNode {
 }
 
 // DeserializeFastNode constructs an *FastNode from an encoded byte slice.
-func DeserializeFastNode(key []byte, buf []byte) (*FastNode, error) {
+func DeserializeFastNode(key []byte, buf []byte) (Node, error) {
 	ver, n, cause := decodeVarint(buf)
 	if cause != nil {
 		return nil, errors.Wrap(cause, "decoding fastnode.version")

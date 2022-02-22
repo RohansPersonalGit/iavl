@@ -168,8 +168,9 @@ func TestUnit(t *testing.T) {
 			t.Fatalf("Expected %v new hashes, got %v", hashCount, count)
 		}
 		// nuke hashes and reconstruct hash, ensure it's the same.
-		tree.root.traverse(tree, true, func(node *Node) bool {
-			node.hash = nil
+		tree.root.traverse(tree, true, func(node ComplexNode) bool {
+			// TODO: THis should not be created just doing for now tot est
+			node.setHash(nil)
 			return false
 		})
 		// ensure that the new hash after nuking is the same as the old.

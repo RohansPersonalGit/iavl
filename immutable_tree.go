@@ -14,7 +14,7 @@ import (
 // Returned key/value byte slices must not be modified, since they may point to data located inside
 // IAVL which would also be modified.
 type ImmutableTree struct {
-	root    *Node
+	root    ComplexNode
 	ndb     *nodeDB
 	version int64
 }
@@ -75,7 +75,7 @@ func defaultNodeEncoder(id []byte, depth int, isLeaf bool) string {
 	return fmt.Sprintf("%s%X", prefix, id)
 }
 
-func (t *ImmutableTree) renderNode(node *Node, indent string, depth int, encoder func([]byte, int, bool) string) []string {
+func (t *ImmutableTree) renderNode(node ComplexNode, indent string, depth int, encoder func([]byte, int, bool) string) []string {
 	prefix := strings.Repeat(indent, depth)
 	// handle nil
 	if node == nil {
@@ -83,14 +83,14 @@ func (t *ImmutableTree) renderNode(node *Node, indent string, depth int, encoder
 	}
 	// handle leaf
 	if node.isLeaf() {
-		here := fmt.Sprintf("%s%s", prefix, encoder(node.key, depth, true))
+		here := fmt.Sprintf("%s%s", prefix, encoder(node.getKey(), depth, true))
 		return []string{here}
 	}
 
 	// recurse on inner node
-	here := fmt.Sprintf("%s%s", prefix, encoder(node.hash, depth, false))
-	left := t.renderNode(node.getLeftNode(t), indent, depth+1, encoder)
-	right := t.renderNode(node.getRightNode(t), indent, depth+1, encoder)
+	here := fmt.Sprintf("%s%s", prefix, encoder(node.getHash(), depth, false))
+	left := t.renderNode(node.getLeftNodeFromTree(t), indent, depth+1, encoder)
+	right := t.renderNode(node.getRightNodeFromTree(t), indent, depth+1, encoder)
 	result := append(left, here)
 	result = append(result, right...)
 	return result
@@ -101,7 +101,7 @@ func (t *ImmutableTree) Size() int64 {
 	if t.root == nil {
 		return 0
 	}
-	return t.root.size
+	return t.root.getSize()
 }
 
 // Version returns the version of the tree.
@@ -114,7 +114,7 @@ func (t *ImmutableTree) Height() int8 {
 	if t.root == nil {
 		return 0
 	}
-	return t.root.height
+	return t.root.getHeight()
 }
 
 // Has returns whether or not a key exists.
@@ -187,13 +187,13 @@ func (t *ImmutableTree) Get(key []byte) []byte {
 	}
 
 	// cache node was updated later than the current tree. Use regular strategy for reading from the current tree
-	if fastNode.versionLastUpdatedAt > t.version {
-		debug("last updated version %d is too new for FastNode where tree is of version %d with key %X, falling back to regular IAVL logic\n", fastNode.versionLastUpdatedAt, t.version, key)
+	if fastNode.getVersion() > t.version {
+		debug("last updated version %d is too new for FastNode where tree is of version %d with key %X, falling back to regular IAVL logic\n", fastNode.getVersion(), t.version, key)
 		_, result := t.root.get(t, key)
 		return result
 	}
 
-	return fastNode.value
+	return fastNode.getValue()
 }
 
 // GetByIndex gets the key and value at the specified index.
@@ -239,9 +239,9 @@ func (t *ImmutableTree) IterateRange(start, end []byte, ascending bool, fn func(
 	if t.root == nil {
 		return false
 	}
-	return t.root.traverseInRange(t, start, end, ascending, false, false, func(node *Node) bool {
-		if node.height == 0 {
-			return fn(node.key, node.value)
+	return t.root.traverseInRange(t, start, end, ascending, false, false, func(node ComplexNode) bool {
+		if node.getHeight() == 0 {
+			return fn(node.getKey(), node.getValue())
 		}
 		return false
 	})
@@ -254,9 +254,9 @@ func (t *ImmutableTree) IterateRangeInclusive(start, end []byte, ascending bool,
 	if t.root == nil {
 		return false
 	}
-	return t.root.traverseInRange(t, start, end, ascending, true, false, func(node *Node) bool {
-		if node.height == 0 {
-			return fn(node.key, node.value, node.version)
+	return t.root.traverseInRange(t, start, end, ascending, true, false, func(node ComplexNode) bool {
+		if node.getHeight() == 0 {
+			return fn(node.getKey(), node.getValue(), node.getVersion())
 		}
 		return false
 	})
@@ -287,7 +287,7 @@ func (t *ImmutableTree) clone() *ImmutableTree {
 // nodeSize is like Size, but includes inner nodes too.
 func (t *ImmutableTree) nodeSize() int {
 	size := 0
-	t.root.traverse(t, true, func(n *Node) bool {
+	t.root.traverse(t, true, func(n ComplexNode) bool {
 		size++
 		return false
 	})

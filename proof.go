@@ -198,7 +198,7 @@ func proofLeafNodeFromProto(pbLeaf *iavlproto.ProofLeafNode) (ProofLeafNode, err
 // If the key does not exist, returns the path to the next leaf left of key (w/
 // path), except when key is less than the least item, in which case it returns
 // a path to the least item.
-func (node *Node) PathToLeaf(t *ImmutableTree, key []byte) (PathToLeaf, *Node, error) {
+func (node *TreeNode) PathToLeaf(t *ImmutableTree, key []byte) (PathToLeaf, ComplexNode, error) {
 	path := new(PathToLeaf)
 	val, err := node.pathToLeaf(t, key, path)
 	return *path, val, err
@@ -207,7 +207,7 @@ func (node *Node) PathToLeaf(t *ImmutableTree, key []byte) (PathToLeaf, *Node, e
 // pathToLeaf is a helper which recursively constructs the PathToLeaf.
 // As an optimization the already constructed path is passed in as an argument
 // and is shared among recursive calls.
-func (node *Node) pathToLeaf(t *ImmutableTree, key []byte, path *PathToLeaf) (*Node, error) {
+func (node *TreeNode) pathToLeaf(t *ImmutableTree, key []byte, path *PathToLeaf) (ComplexNode, error) {
 	if node.height == 0 {
 		if bytes.Equal(node.key, key) {
 			return node, nil
@@ -226,10 +226,10 @@ func (node *Node) pathToLeaf(t *ImmutableTree, key []byte, path *PathToLeaf) (*N
 			Size:    node.size,
 			Version: node.version,
 			Left:    nil,
-			Right:   node.getRightNode(t).hash,
+			Right:   node.getRightNodeFromTree(t).getHash(),
 		}
 		*path = append(*path, pin)
-		n, err := node.getLeftNode(t).pathToLeaf(t, key, path)
+		n, err := node.getLeftNodeFromTree(t).pathToLeaf(t, key, path)
 		return n, err
 	}
 	// right side
@@ -237,10 +237,10 @@ func (node *Node) pathToLeaf(t *ImmutableTree, key []byte, path *PathToLeaf) (*N
 		Height:  node.height,
 		Size:    node.size,
 		Version: node.version,
-		Left:    node.getLeftNode(t).hash,
+		Left:    node.getLeftNodeFromTree(t).getHash(),
 		Right:   nil,
 	}
 	*path = append(*path, pin)
-	n, err := node.getRightNode(t).pathToLeaf(t, key, path)
+	n, err := node.getRightNodeFromTree(t).pathToLeaf(t, key, path)
 	return n, err
 }

@@ -21,7 +21,7 @@ type traversal struct {
 
 var errIteratorNilTreeGiven = errors.New("iterator must be created with an immutable tree but the tree was nil")
 
-func (node *Node) newTraversal(tree *ImmutableTree, start, end []byte, ascending bool, inclusive bool, post bool) *traversal {
+func (node *TreeNode) newTraversal(tree *ImmutableTree, start, end []byte, ascending bool, inclusive bool, post bool) *traversal {
 	return &traversal{
 		tree:         tree,
 		start:        start,
@@ -38,19 +38,19 @@ func (node *Node) newTraversal(tree *ImmutableTree, start, end []byte, ascending
 // children should be traversed. When delayed is set to false, the delayedNode is
 // already have expanded, and it could be immediately returned.
 type delayedNode struct {
-	node    *Node
+	node    ComplexNode
 	delayed bool
 }
 
 type delayedNodes []delayedNode
 
-func (nodes *delayedNodes) pop() (*Node, bool) {
+func (nodes *delayedNodes) pop() (ComplexNode, bool) {
 	node := (*nodes)[len(*nodes)-1]
 	*nodes = (*nodes)[:len(*nodes)-1]
 	return node.node, node.delayed
 }
 
-func (nodes *delayedNodes) push(node *Node, delayed bool) {
+func (nodes *delayedNodes) push(node ComplexNode, delayed bool) {
 	*nodes = append(*nodes, delayedNode{node, delayed})
 }
 
@@ -89,7 +89,7 @@ func (nodes *delayedNodes) length() int {
 // 1. If the traversal is postorder, the current node will be append to the `delayedNodes` with `delayed`
 //    set to false, and immediately returned at the subsequent call of `traversal.next()` at the last line.
 // 2. If the traversal is preorder, the current node will be returned.
-func (t *traversal) next() *Node {
+func (t *traversal) next() ComplexNode {
 	// End of traversal.
 	if t.delayedNodes.length() == 0 {
 		return nil
@@ -102,11 +102,11 @@ func (t *traversal) next() *Node {
 		return node
 	}
 
-	afterStart := t.start == nil || bytes.Compare(t.start, node.key) < 0
-	startOrAfter := afterStart || bytes.Equal(t.start, node.key)
-	beforeEnd := t.end == nil || bytes.Compare(node.key, t.end) < 0
+	afterStart := t.start == nil || bytes.Compare(t.start, node.getKey()) < 0
+	startOrAfter := afterStart || bytes.Equal(t.start, node.getKey())
+	beforeEnd := t.end == nil || bytes.Compare(node.getKey(), t.end) < 0
 	if t.inclusive {
-		beforeEnd = beforeEnd || bytes.Equal(node.key, t.end)
+		beforeEnd = beforeEnd || bytes.Equal(node.getKey(), t.end)
 	}
 
 	// case of postorder. A-1 and B-1
@@ -122,22 +122,22 @@ func (t *traversal) next() *Node {
 		if t.ascending {
 			if beforeEnd {
 				// push the delayed traversal for the right nodes,
-				t.delayedNodes.push(node.getRightNode(t.tree), true)
+				t.delayedNodes.push(node.getRightNodeFromTree(t.tree), true)
 			}
 			if afterStart {
 				// push the delayed traversal for the left nodes,
-				t.delayedNodes.push(node.getLeftNode(t.tree), true)
+				t.delayedNodes.push(node.getLeftNodeFromTree(t.tree), true)
 			}
 		} else {
 			// if node is a branch node and the order is not ascending
 			// We traverse through the right subtree, then the left subtree.
 			if afterStart {
 				// push the delayed traversal for the left nodes,
-				t.delayedNodes.push(node.getLeftNode(t.tree), true)
+				t.delayedNodes.push(node.getLeftNodeFromTree(t.tree), true)
 			}
 			if beforeEnd {
 				// push the delayed traversal for the right nodes,
-				t.delayedNodes.push(node.getRightNode(t.tree), true)
+				t.delayedNodes.push(node.getRightNodeFromTree(t.tree), true)
 			}
 		}
 	}
@@ -220,8 +220,8 @@ func (iter *Iterator) Next() {
 		return
 	}
 
-	if node.height == 0 {
-		iter.key, iter.value = node.key, node.value
+	if node.getHeight() == 0 {
+		iter.key, iter.value = node.getKey(), node.getValue()
 		return
 	}
 

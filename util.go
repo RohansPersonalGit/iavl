@@ -14,7 +14,7 @@ func PrintTree(tree *ImmutableTree) {
 	printNode(ndb, root, 0)
 }
 
-func printNode(ndb *nodeDB, node *Node, indent int) {
+func printNode(ndb *nodeDB, node ComplexNode, indent int) {
 	indentPrefix := ""
 	for i := 0; i < indent; i++ {
 		indentPrefix += "    "
@@ -24,23 +24,23 @@ func printNode(ndb *nodeDB, node *Node, indent int) {
 		fmt.Printf("%s<nil>\n", indentPrefix)
 		return
 	}
-	if node.rightNode != nil {
-		printNode(ndb, node.rightNode, indent+1)
-	} else if node.rightHash != nil {
-		rightNode := ndb.GetNode(node.rightHash)
+	if node.getRightNode() != nil {
+		printNode(ndb, node.getRightNode(), indent+1)
+	} else if node.getRightHash() != nil {
+		rightNode := ndb.GetNode(node.getRightHash())
 		printNode(ndb, rightNode, indent+1)
 	}
 
 	hash := node._hash()
 	fmt.Printf("%sh:%X\n", indentPrefix, hash)
 	if node.isLeaf() {
-		fmt.Printf("%s%X:%X (%v)\n", indentPrefix, node.key, node.value, node.height)
+		fmt.Printf("%s%X:%X (%v)\n", indentPrefix, node.getKey(), node.getValue(), node.getHeight())
 	}
 
-	if node.leftNode != nil {
-		printNode(ndb, node.leftNode, indent+1)
-	} else if node.leftHash != nil {
-		leftNode := ndb.GetNode(node.leftHash)
+	if node.getLeftNode() != nil {
+		printNode(ndb, node.getLeftNode(), indent+1)
+	} else if node.getLeftHash() != nil {
+		leftNode := ndb.GetNode(node.getLeftHash())
 		printNode(ndb, leftNode, indent+1)
 	}
 
