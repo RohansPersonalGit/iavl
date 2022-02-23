@@ -75,7 +75,7 @@ func (node *FastNode) EncodedSize() int {
 	return n
 }
 
-// writeBytes writes the FastNode as a serialized byte slice to the supplied io.Writer.
+// WriteBytes writes the FastNode as a serialized byte slice to the supplied io.Writer.
 func (node *FastNode) WriteBytes(w io.Writer) error {
 	if node == nil {
 		return errors.New("cannot write nil node")

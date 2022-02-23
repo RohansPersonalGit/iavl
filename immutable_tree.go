@@ -14,7 +14,7 @@ import (
 // Returned key/value byte slices must not be modified, since they may point to data located inside
 // IAVL which would also be modified.
 type ImmutableTree struct {
-	root    *TreeNode
+	root   *TreeNode
 	ndb     *nodeDB
 	version int64
 }
@@ -75,7 +75,7 @@ func defaultNodeEncoder(id []byte, depth int, isLeaf bool) string {
 	return fmt.Sprintf("%s%X", prefix, id)
 }
 
-func (t *ImmutableTree) renderNode(node *TreeNode, indent string, depth int, encoder func([]byte, int, bool) string) []string {
+func (t *ImmutableTree) renderNode(node ComplexNode, indent string, depth int, encoder func([]byte, int, bool) string) []string {
 	prefix := strings.Repeat(indent, depth)
 	// handle nil
 	if node == nil {
@@ -83,14 +83,14 @@ func (t *ImmutableTree) renderNode(node *TreeNode, indent string, depth int, enc
 	}
 	// handle leaf
 	if node.isLeaf() {
-		here := fmt.Sprintf("%s%s", prefix, encoder(node.key, depth, true))
+		here := fmt.Sprintf("%s%s", prefix, encoder(node.GetKey(), depth, true))
 		return []string{here}
 	}
 
 	// recurse on inner node
-	here := fmt.Sprintf("%s%s", prefix, encoder(node.hash, depth, false))
-	left := t.renderNode(node.getLeftNode(t), indent, depth+1, encoder)
-	right := t.renderNode(node.getRightNode(t), indent, depth+1, encoder)
+	here := fmt.Sprintf("%s%s", prefix, encoder(node.getHash(), depth, false))
+	left := t.renderNode(node.getLeftNodeFromTree(t), indent, depth+1, encoder)
+	right := t.renderNode(node.getRightNodeFromTree(t), indent, depth+1, encoder)
 	result := append(left, here)
 	result = append(result, right...)
 	return result
@@ -101,7 +101,11 @@ func (t *ImmutableTree) Size() int64 {
 	if t.root == nil {
 		return 0
 	}
-	return t.root.size
+	var t2 *TreeNode
+	if t.root == t2{
+		return 0
+	}
+	return t.root.Size()
 }
 
 // Version returns the version of the tree.
@@ -114,7 +118,11 @@ func (t *ImmutableTree) Height() int8 {
 	if t.root == nil {
 		return 0
 	}
-	return t.root.height
+	var t2 *TreeNode
+	if t.root == t2{
+		return 0
+	}
+	return t.root.Height()
 }
 
 // Has returns whether or not a key exists.
@@ -239,9 +247,9 @@ func (t *ImmutableTree) IterateRange(start, end []byte, ascending bool, fn func(
 	if t.root == nil {
 		return false
 	}
-	return t.root.traverseInRange(t, start, end, ascending, false, false, func(node *TreeNode) bool {
-		if node.height == 0 {
-			return fn(node.key, node.value)
+	return t.root.traverseInRange(t, start, end, ascending, false, false, func(node ComplexNode) bool {
+		if node.Height() == 0 {
+			return fn(node.GetKey(), node.GetValue())
 		}
 		return false
 	})
@@ -254,9 +262,9 @@ func (t *ImmutableTree) IterateRangeInclusive(start, end []byte, ascending bool,
 	if t.root == nil {
 		return false
 	}
-	return t.root.traverseInRange(t, start, end, ascending, true, false, func(node *TreeNode) bool {
-		if node.height == 0 {
-			return fn(node.key, node.value, node.version)
+	return t.root.traverseInRange(t, start, end, ascending, true, false, func(node ComplexNode) bool {
+		if node.Height() == 0 {
+			return fn(node.GetKey(), node.GetValue(), node.GetVersion())
 		}
 		return false
 	})
@@ -287,7 +295,7 @@ func (t *ImmutableTree) clone() *ImmutableTree {
 // nodeSize is like Size, but includes inner nodes too.
 func (t *ImmutableTree) nodeSize() int {
 	size := 0
-	t.root.traverse(t, true, func(n *TreeNode) bool {
+	t.root.traverse(t, true, func(n ComplexNode) bool {
 		size++
 		return false
 	})

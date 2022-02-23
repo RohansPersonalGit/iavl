@@ -35,7 +35,7 @@ func BenchmarkOrphanKey(b *testing.B) {
 func TestNewNoDbStorage_StorageVersionInDb_Success(t *testing.T) {
 	const expectedVersion = defaultStorageVersionValue
 	ctrl := gomock.NewController(t)
-	ndb, _, _ := createNodeDbWithMocks(ctrl)
+	ndb, _, _, _ := createNodeDbWithMocks(ctrl)
 
 	require.Equal(t, expectedVersion, ndb.storageVersion)
 }
@@ -251,7 +251,7 @@ func TestNodeDB_SaveFastNode_ReturnsErrorForNilKey(t *testing.T) {
 	mockNode := NewMockNode(ctrl)
 	mockNode.EXPECT().getKey().Return(nil).Times(1)
 
-	ndb, _, _ := createNodeDbWithMocks(ctrl)
+	ndb, _, _, _ := createNodeDbWithMocks(ctrl)
 	err := ndb.SaveFastNode(mockNode)
 	require.Error(t, err)
 }
@@ -261,10 +261,10 @@ func TestNodeDB_SaveFastNode_FailsWhenUnableToWriteToBuffer(t *testing.T) {
 	mockNode := NewMockNode(ctrl)
 	var buf bytes.Buffer
 	mockNode.EXPECT().getKey().Return([]byte("k1")).Times(1)
-	mockNode.EXPECT().encodedSize().Return(1).Times(1)
-	mockNode.EXPECT().writeBytes(gomock.AssignableToTypeOf(&buf)).Return(fmt.Errorf("Error")).Times(1)
+	mockNode.EXPECT().EncodedSize().Return(1).Times(1)
+	mockNode.EXPECT().WriteBytes(gomock.AssignableToTypeOf(&buf)).Return(fmt.Errorf("Error")).Times(1)
 
-	ndb, _, _ := createNodeDbWithMocks(ctrl)
+	ndb, _, _, _ := createNodeDbWithMocks(ctrl)
 	err := ndb.SaveFastNode(mockNode)
 	require.Error(t, err)
 }
@@ -272,14 +272,14 @@ func TestNodeDB_SaveFastNode_FailsWhenUnableToWriteToBuffer(t *testing.T) {
 func TestNodeDB_SaveFastNode_ReturnErrorWhenNdbBatchFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockNode := NewMockNode(ctrl)
-	ndb, _, mockBatch := createNodeDbWithMocks(ctrl)
+	ndb, _, mockBatch, _ := createNodeDbWithMocks(ctrl)
 
 	var buf bytes.Buffer
 	buf.Grow(40)
 
 	mockNode.EXPECT().getKey().Return([]byte("k1")).Times(2)
-	mockNode.EXPECT().encodedSize().Return(1).Times(1)
-	mockNode.EXPECT().writeBytes(gomock.AssignableToTypeOf(&buf)).
+	mockNode.EXPECT().EncodedSize().Return(1).Times(1)
+	mockNode.EXPECT().WriteBytes(gomock.AssignableToTypeOf(&buf)).
 		Return(nil).
 		Do(func(buf *bytes.Buffer) {
 			// TODO: this should have the acutla expected bytes
@@ -297,14 +297,14 @@ func TestNodeDB_SaveFastNode(t *testing.T) {
 	// TODO: We should be checkign the value was/wasnt added to cache
 	ctrl := gomock.NewController(t)
 	mockNode := NewMockNode(ctrl)
-	ndb, _, mockBatch := createNodeDbWithMocks(ctrl)
+	ndb, _, mockBatch, _ := createNodeDbWithMocks(ctrl)
 
 	var buf bytes.Buffer
 	buf.Grow(40)
 
 	mockNode.EXPECT().getKey().Return([]byte("k1")).Times(4)
-	mockNode.EXPECT().encodedSize().Return(1).Times(1)
-	mockNode.EXPECT().writeBytes(gomock.AssignableToTypeOf(&buf)).Return(nil).
+	mockNode.EXPECT().EncodedSize().Return(1).Times(1)
+	mockNode.EXPECT().WriteBytes(gomock.AssignableToTypeOf(&buf)).Return(nil).
 		Do(func(buf *bytes.Buffer) {
 			// TODO: this should have the acutla expected bytes
 			buf.Write([]byte("test"))
@@ -317,14 +317,60 @@ func TestNodeDB_SaveFastNode(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func createNodeDbWithMocks(ctrl *gomock.Controller) (*nodeDB, *mock.MockDB, *mock.MockBatch) {
+func TestNodeDB_GetNodeFailsWhenNil(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ndb, dbMock, _, getConstructorCall := createNodeDbWithMocks(ctrl)
+	require.Panics(t, func() {
+		ndb.GetNode(nil)
+	})
+	gomock.InOrder(
+		getConstructorCall,
+		// TODO: We should have the keyformat here explicityly
+		dbMock.EXPECT().Get(gomock.Any()).Return(nil, nil),
+	)
+
+	require.Panics(t, func() {
+		ndb.GetNode([]byte("k1"))
+	})
+
+}
+
+func TestNodeDB_SaveNode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ndb, _, mockBatch, _ := createNodeDbWithMocks(ctrl)
+	nillNode := NewMockComplexNode(ctrl)
+	nillNode.EXPECT().getHash().Return(nil).Times(1)
+	require.Panics(t, func() {
+		ndb.SaveNode(nillNode)
+	})
+
+	alreadyPersistedNode := NewMockComplexNode(ctrl)
+	alreadyPersistedNode.EXPECT().getHash().Return([]byte("Fred")).Times(1)
+	alreadyPersistedNode.EXPECT().Persisted().Return(true).Times(1)
+	require.Panics(t, func() {
+		ndb.SaveNode(alreadyPersistedNode)
+	})
+
+	happyNode := NewMockComplexNode(ctrl)
+	happyNode.EXPECT().getHash().Return([]byte("Fred")).Times(5)
+	happyNode.EXPECT().Persisted().Return(false).Times(1)
+	happyNode.EXPECT().EncodedSize().Return(10).Times(1)
+	happyNode.EXPECT().WriteBytes(gomock.Any()).Return(nil).Times(1)
+	mockBatch.EXPECT().Set(gomock.Any(), gomock.Any()).Return(nil)
+	happyNode.EXPECT().setPersisted(true).Times(1)
+	ndb.SaveNode(happyNode)
+
+}
+
+func createNodeDbWithMocks(ctrl *gomock.Controller) (*nodeDB, *mock.MockDB, *mock.MockBatch, *gomock.Call) {
 	const expectedVersion = defaultStorageVersionValue
 
 	dbMock := mock.NewMockDB(ctrl)
 	mockBatch := mock.NewMockBatch(ctrl)
 
-	dbMock.EXPECT().Get(gomock.Any()).Return([]byte(expectedVersion), nil).Times(1)
+
+	getFromDbCall := dbMock.EXPECT().Get(gomock.Any()).Return([]byte(expectedVersion), nil)
 	dbMock.EXPECT().NewBatch().Return(mockBatch).Times(1)
 
-	return newNodeDB(dbMock, 0, nil), dbMock, mockBatch
+	return newNodeDB(dbMock, 0, nil), dbMock, mockBatch, getFromDbCall
 }

@@ -191,30 +191,30 @@ func (ndb *nodeDB) GetFastNode(key []byte) (Node, error) {
 }
 
 // SaveNode saves a node to disk.
-func (ndb *nodeDB) SaveNode(node *TreeNode) {
+func (ndb *nodeDB) SaveNode(node ComplexNode) {
 	ndb.mtx.Lock()
 	defer ndb.mtx.Unlock()
 
-	if node.hash == nil {
+	if node.getHash() == nil {
 		panic("Expected to find node.hash, but none found.")
 	}
-	if node.persisted {
+	if node.Persisted() {
 		panic("Shouldn't be calling save on an already persisted node.")
 	}
 
 	// Save node bytes to db.
 	var buf bytes.Buffer
-	buf.Grow(node.encodedSize())
+	buf.Grow(node.EncodedSize())
 
-	if err := node.writeBytes(&buf); err != nil {
+	if err := node.WriteBytes(&buf); err != nil {
 		panic(err)
 	}
 
-	if err := ndb.batch.Set(ndb.nodeKey(node.hash), buf.Bytes()); err != nil {
+	if err := ndb.batch.Set(ndb.nodeKey(node.getHash()), buf.Bytes()); err != nil {
 		panic(err)
 	}
-	debug("BATCH SAVE %X %p\n", node.hash, node)
-	node.persisted = true
+	debug("BATCH SAVE %X %p\n", node.getHash(), node)
+	node.setPersisted(true)
 	ndb.cacheNode(node)
 }
 
@@ -336,29 +336,29 @@ func (ndb *nodeDB) Has(hash []byte) (bool, error) {
 // NOTE: This function clears leftNode/rigthNode recursively and
 // calls _hash() on the given node.
 // TODO refactor, maybe use hashWithCount() but provide a callback.
-func (ndb *nodeDB) SaveBranch(node *TreeNode) []byte {
-	if node.persisted {
-		return node.hash
+func (ndb *nodeDB) SaveBranch(node ComplexNode) []byte {
+	if node.Persisted() {
+		return node.getHash()
 	}
 
-	if node.leftNode != nil {
-		node.leftHash = ndb.SaveBranch(node.leftNode)
+	if node.LeftNode() != nil {
+		node.SetLeftHash(ndb.SaveBranch(node.LeftNode()))
 	}
-	if node.rightNode != nil {
-		node.rightHash = ndb.SaveBranch(node.rightNode)
+	if node.RightNode() != nil {
+		node.setRightHash(ndb.SaveBranch(node.RightNode()))
 	}
 
 	node._hash()
 	ndb.SaveNode(node)
 
 	// resetBatch only working on generate a genesis block
-	if node.version <= genesisVersion {
+	if node.GetVersion() <= genesisVersion {
 		ndb.resetBatch()
 	}
-	node.leftNode = nil
-	node.rightNode = nil
+	node.setLeftNode(nil)
+	node.setRightNode(nil)
 
-	return node.hash
+	return node.getHash()
 }
 
 // resetBatch reset the db batch, keep low memory used
@@ -829,13 +829,13 @@ func (ndb *nodeDB) uncacheNode(hash []byte) {
 
 // Add a node to the cache and pop the least recently used node if we've
 // reached the cache size limit.
-func (ndb *nodeDB) cacheNode(node *TreeNode) {
+func (ndb *nodeDB) cacheNode(node ComplexNode) {
 	elem := ndb.nodeCacheQueue.PushBack(node)
-	ndb.nodeCache[string(node.hash)] = elem
+	ndb.nodeCache[string(node.getHash())] = elem
 
 	if ndb.nodeCacheQueue.Len() > ndb.nodeCacheSize {
 		oldest := ndb.nodeCacheQueue.Front()
-		hash := ndb.nodeCacheQueue.Remove(oldest).(*TreeNode).hash
+		hash := ndb.nodeCacheQueue.Remove(oldest).(ComplexNode).getHash()
 		delete(ndb.nodeCache, string(hash))
 	}
 }
@@ -904,11 +904,11 @@ func (ndb *nodeDB) getRoots() (map[int64][]byte, error) {
 
 // SaveRoot creates an entry on disk for the given root, so that it can be
 // loaded later.
-func (ndb *nodeDB) SaveRoot(root *TreeNode, version int64) error {
-	if len(root.hash) == 0 {
+func (ndb *nodeDB) SaveRoot(root ComplexNode, version int64) error {
+	if len(root.getHash()) == 0 {
 		panic("SaveRoot: root hash should not be empty")
 	}
-	return ndb.saveRoot(root.hash, version)
+	return ndb.saveRoot(root.getHash(), version)
 }
 
 // SaveEmptyRoot creates an entry on disk for an empty root.
@@ -951,10 +951,10 @@ func (ndb *nodeDB) decrVersionReaders(version int64) {
 
 // Utility and test functions
 
-func (ndb *nodeDB) leafNodes() ([]*TreeNode, error) {
-	leaves := []*TreeNode{}
+func (ndb *nodeDB) leafNodes() ([]ComplexNode, error) {
+	leaves := []ComplexNode{}
 
-	err := ndb.traverseNodes(func(hash []byte, node *TreeNode) error {
+	err := ndb.traverseNodes(func(hash []byte, node ComplexNode) error {
 		if node.isLeaf() {
 			leaves = append(leaves, node)
 		}
@@ -968,10 +968,10 @@ func (ndb *nodeDB) leafNodes() ([]*TreeNode, error) {
 	return leaves, nil
 }
 
-func (ndb *nodeDB) nodes() ([]*TreeNode, error) {
-	nodes := []*TreeNode{}
+func (ndb *nodeDB) nodes() ([]ComplexNode, error) {
+	nodes := []ComplexNode{}
 
-	err := ndb.traverseNodes(func(hash []byte, node *TreeNode) error {
+	err := ndb.traverseNodes(func(hash []byte, node ComplexNode) error {
 		nodes = append(nodes, node)
 		return nil
 	})
@@ -1019,8 +1019,8 @@ func (ndb *nodeDB) size() int {
 	return size
 }
 
-func (ndb *nodeDB) traverseNodes(fn func(hash []byte, node *TreeNode) error) error {
-	nodes := []*TreeNode{}
+func (ndb *nodeDB) traverseNodes(fn func(hash []byte, node ComplexNode) error) error {
+	nodes := []ComplexNode{}
 
 	err := ndb.traversePrefix(nodeKeyFormat.Key(), func(key, value []byte) error {
 		node, err := MakeNode(value)
@@ -1037,11 +1037,11 @@ func (ndb *nodeDB) traverseNodes(fn func(hash []byte, node *TreeNode) error) err
 	}
 
 	sort.Slice(nodes, func(i, j int) bool {
-		return bytes.Compare(nodes[i].key, nodes[j].key) < 0
+		return bytes.Compare(nodes[i].GetKey(), nodes[j].GetKey()) < 0
 	})
 
 	for _, n := range nodes {
-		if err := fn(n.hash, n); err != nil {
+		if err := fn(n.getHash(), n); err != nil {
 			return err
 		}
 	}
@@ -1069,18 +1069,18 @@ func (ndb *nodeDB) String() (string, error) {
 
 	str += "\n"
 
-	err = ndb.traverseNodes(func(hash []byte, node *TreeNode) error {
+	err = ndb.traverseNodes(func(hash []byte, node ComplexNode) error {
 		switch {
 		case len(hash) == 0:
 			str += "<nil>\n"
 		case node == nil:
 			str += fmt.Sprintf("%s%40x: <nil>\n", nodeKeyFormat.Prefix(), hash)
-		case node.value == nil && node.height > 0:
+		case node.GetValue() == nil && node.Height() > 0:
 			str += fmt.Sprintf("%s%40x: %s   %-16s h=%d version=%d\n",
-				nodeKeyFormat.Prefix(), hash, node.key, "", node.height, node.version)
+				nodeKeyFormat.Prefix(), hash, node.GetKey(), "", node.Height(), node.GetVersion())
 		default:
 			str += fmt.Sprintf("%s%40x: %s = %-16s h=%d version=%d\n",
-				nodeKeyFormat.Prefix(), hash, node.key, node.value, node.height, node.version)
+				nodeKeyFormat.Prefix(), hash, node.GetKey(), node.GetValue(), node.Height(), node.GetVersion())
 		}
 		index++
 		return nil

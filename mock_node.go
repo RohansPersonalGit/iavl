@@ -34,7 +34,7 @@ func (m *MockNode) EXPECT() *MockNodeMockRecorder {
 	return m.recorder
 }
 
-// encodedSize mocks base method.
+// EncodedSize mocks base method.
 func (m *MockNode) EncodedSize() int {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EncodedSize")
@@ -42,8 +42,8 @@ func (m *MockNode) EncodedSize() int {
 	return ret0
 }
 
-// encodedSize indicates an expected call of encodedSize.
-func (mr *MockNodeMockRecorder) encodedSize() *gomock.Call {
+// EncodedSize indicates an expected call of EncodedSize.
+func (mr *MockNodeMockRecorder) EncodedSize() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EncodedSize", reflect.TypeOf((*MockNode)(nil).EncodedSize))
 }
@@ -102,7 +102,7 @@ func (mr *MockNodeMockRecorder) setKey(key interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetKey", reflect.TypeOf((*MockNode)(nil).SetKey), key)
 }
 
-// writeBytes mocks base method.
+// WriteBytes mocks base method.
 func (m *MockNode) WriteBytes(w io.Writer) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WriteBytes", w)
@@ -110,8 +110,8 @@ func (m *MockNode) WriteBytes(w io.Writer) error {
 	return ret0
 }
 
-// writeBytes indicates an expected call of writeBytes.
-func (mr *MockNodeMockRecorder) writeBytes(w interface{}) *gomock.Call {
+// WriteBytes indicates an expected call of WriteBytes.
+func (mr *MockNodeMockRecorder) WriteBytes(w interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteBytes", reflect.TypeOf((*MockNode)(nil).WriteBytes), w)
 }
